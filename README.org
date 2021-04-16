@@ -1,0 +1,23 @@
+#+title: radere 🍧
+#+subtitle: raster detector response 
+
+* What's here
+
+This package provides a prototype reimplementation of [[https://wirecell.bnl.gov/][Wire-Cell Toolkit's]] LAr TPC detector simulation.  The intention is to test out optimizations made possible by simplifying the code to make the algorithms more SIMD/GPU friendly and factoring the parts to better allow disentangling bottlenecks.
+
+* Guidelines
+
+- optionally use CPU or GPU where possible
+- allow CPU/GPU choice w/out changing application code
+
+** FFT
+
+A core algorithm is FFT
+
+- [[https://numpy.org/doc/stable/reference/routines.fft.html][numpy.fft]]
+- [[https://docs.scipy.org/doc/scipy/reference/fft.html][scipy.fft]]
+- [[https://pytorch.org/docs/stable/fft.html][torch.fft]]
+
+Also interesting:
+
+- [[https://github.com/rapidsai/cusignal][cusignal]] a ~scipy.signal~-like package that makes use of GPU.  Part of a larger [[https://rapids.ai/][RAPIDS]] ecosystem.

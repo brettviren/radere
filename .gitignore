@@ -1,0 +1,7 @@
+*~
+.pytest*
+.direnv
+.envrc
+*.html
+*.egg-info
+__pycache__
