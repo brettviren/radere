@@ -1,6 +1,8 @@
 #+title: radere 🍧
 #+subtitle: raster detector response 
 
+This is a work in progress.
+
 * What's here
 
 This package provides a prototype reimplementation of [[https://wirecell.bnl.gov/][Wire-Cell Toolkit's]] LAr TPC detector simulation.  The intention is to test out optimizations made possible by simplifying the code to make the algorithms more SIMD/GPU friendly and factoring the parts to better allow disentangling bottlenecks.
