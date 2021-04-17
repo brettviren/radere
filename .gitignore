@@ -5,3 +5,8 @@
 *.html
 *.egg-info
 __pycache__
+cut
+*.jpg
+*.npz
+*.png
+*.pdf
