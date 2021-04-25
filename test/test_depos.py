@@ -10,3 +10,4 @@ def test_contained():
     d2 = depos.contained(d, ((10,15),(10,15),(10,15)))
     assert d2.shape[0] < ndepos
     assert d2.shape[1] == 7
+

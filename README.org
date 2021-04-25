@@ -23,3 +23,28 @@ A core algorithm is FFT
 Also interesting:
 
 - [[https://github.com/rapidsai/cusignal][cusignal]] a ~scipy.signal~-like package that makes use of GPU.  Part of a larger [[https://rapids.ai/][RAPIDS]] ecosystem.
+
+
+* Benchmarks
+
+** Drifter
+
+#+begin_example
+  WIRECELL_PATH=(pwd)/cfg ./install/bin/wire-cell -A depofile=/home/bv/dev/radere/data/haiwang-depos.npz -l stdout -L info -c ~/dev/radere/test/test_drift_wct.jsonnet 2>&1 | grep timer
+  [11:16:08.271] I [ timer  ] Timer: WireCell::DumpDepos : 0.20170672 sec
+  [11:16:08.271] I [ timer  ] Timer: WireCell::Gen::Drifter : 0.11211497 sec
+  [11:16:08.271] I [ timer  ] Timer: WireCell::Sio::NumpyDepoLoader : 0.06377216 sec
+  [11:16:08.271] I [ timer  ] Timer: Total node execution : 0.37759385257959366 sec
+#+end_example
+
+#+begin_example
+pytest -s test/test_drift.py
+numpy:	load:      4002 us	drift:       177 us	rel: 1.000
+cpu:	load:      1886 us	drift:      1052 us	rel: 5.949
+cuda:	load:   1822734 us	drift:      1230 us	rel: 6.953
+cuda:	load:      1441 us	drift:       787 us	rel: 4.450
+#+end_example
+
+Numpy wins!  Pytorch runner up.  C++ DOG SLOW.
+
+

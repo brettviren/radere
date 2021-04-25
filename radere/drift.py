@@ -2,7 +2,7 @@
 '''
 Thanks related to bulk drifting
 '''
-from radere import units
+from radere import units, aots
 
 default_speed = 1.6*units.mm/units.us
 # depends on LAr purity
@@ -12,7 +12,7 @@ default_DL = 7.2 * units.centimeter2 / units.second
 default_DT = 12.0 * units.centimeter2 / units.second
 
 
-class Transport2D:
+class Transport:
     '''
     This component will drift groups of depos by transporting them to
     a 2D plane specifically parallel to X-axis.  If a depo is already
@@ -22,12 +22,13 @@ class Transport2D:
     def __init__(self, planex,
                  speed=default_speed,
                  lifetime=default_lifetime,
-                 DL=default_DL, DT=default_DT):
+                 DL=default_DL, DT=default_DT,fluctuate=True):
         self.speed = speed
         self.lifetime = lifetime
         self.DL = DL
         self.DT = DT
-        self.planex
+        self.planex = planex
+        self.fluctuate = fluctuate
 
     def __call__(self, depos):
         '''
@@ -51,29 +52,31 @@ class Transport2D:
         dLfwd = dL[fwd]
         dTfwd = dT[fwd]
 
+        amod = aots.mod(dtfwd)
+
         # find change in charge due to absorbtion for fwd drift
-        absorbprob = 1-numpy.exp(-dtfwd / self.lifetime)
+        absorbprob = 1-amod.exp(-dtfwd / self.lifetime)
         if self.fluctuate:
-            qsign = numpy.ones_like(qfwd)
+            qsign = amod.ones_like(qfwd)
             qsign[qfwd<0] = -1.0
-            dQ = qsign * binomial(numpy.abs(qfwd).astype('int'), absorbprob)
+            dQ = qsign * aots.binomial(aots.cast(amod.abs(qfwd),'int'), absorbprob)
         else:
             dQ = qfwd * absorbprob
         q[fwd] = dQ
 
         # find broadening
-        dL[fwd] = numpy.sqrt(2.0*self.DL*dtfwd + dLfwd * dLfwd)
-        dT[fwd] = numpy.sqrt(2.0*self.DT*dtfwd + dTfwd * dTfwd)
+        dL[fwd] = amod.sqrt(2.0*self.DL*dtfwd + dLfwd * dLfwd)
+        dT[fwd] = amod.sqrt(2.0*self.DT*dtfwd + dTfwd * dTfwd)
         
         t = depos[:,0] + dt
 
-        out = numpy.vstack([
+        out = amod.vstack([
             t,
             q,
-            self.planex + numpy.zeros_like(x),
+            self.planex + amod.zeros_like(x),
             depos[:,3],
             depos[:,4],
             dL,
             dT])
 
-        return out[numpy.argsort(t)]
+        return out[amod.argsort(t)]

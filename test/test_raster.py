@@ -28,3 +28,6 @@ def test_raster():
 
         plt.imshow(patch, extent=extent, aspect='auto');
         plt.savefig("test_raster_%02d.png" % count)
+
+if '__main__' == __name__:
+    test_raster()
