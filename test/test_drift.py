@@ -21,6 +21,8 @@ def doit(device, rel=1.0):
     print(f'{device}:\tload:{dt1us:10.0f} us\tdrift:{dt2us:10.0f} us\trel: {rel:0.3f}')
     return dt2us
 
+# python -m memory_profiler test/test_drift.py
+# @profile
 def test_timing():
     '''
     Check time to drift
@@ -32,3 +34,6 @@ def test_timing():
     doit("cuda", rel)
 
 
+if '__main__' == __name__:
+    test_timing()
+    
