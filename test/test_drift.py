@@ -22,13 +22,15 @@ def doit(device, rel=1.0):
     return dt2us
 
 # python -m memory_profiler test/test_drift.py
-# @profile
+@profile
 def test_timing():
     '''
     Check time to drift
     '''
     print ('\n')
     rel = doit("numpy")
+    doit("cupy", rel)
+    doit("cupy", rel)
     doit("cpu", rel)
     doit("cuda", rel)
     doit("cuda", rel)

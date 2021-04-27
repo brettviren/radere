@@ -3,7 +3,7 @@
 The core convolution
 '''
 
-from radere.aots import pad, zeros_like, mod
+from radere.aots import extend, zeros_like, mod
 from radere import fft
 
 class ForwardHalf:
@@ -23,7 +23,7 @@ class ForwardHalf:
         The shape gives desired output size.
         '''
         self.shape = tuple([a+b-1 for a,b in zip(shape, kernel.shape)])
-        fr = pad(kernel, self.shape)
+        fr = extend(kernel, self.shape)
         fr = fft.fft(fr, axis=0) # per tick, along wire
         fr = fft.fft(fr, axis=1) # per wire, along tick
         self.kernel = fr
@@ -35,7 +35,7 @@ class ForwardHalf:
         The returned array holds the convolution of qframe and kernel
         left in frequency space.
         '''
-        q = pad(qframe, self.shape)
+        q = extend(qframe, self.shape)
         q = fft.fft(q, axis=0)
         q = fft.fft(q, axis=1)
         return q * self.kernel
@@ -64,13 +64,13 @@ class LongConv:
     def __init__(self, kernel, tsize):
         self.tsize = tsize
         self.fsize = tsize+kernel.size-1
-        fr = pad(kernel, (self.fsize,))
+        fr = extend(kernel, (self.fsize,))
         fr = fft.fft(fr)
         self.kernel = fr
     def __call__(self, q):
         qout = zeros_like(q)
         for iwire in range(q.shape[0]):
-            a = pad(q[iwire], (self.fsize,))
+            a = extend(q[iwire], (self.fsize,))
             a = fft.fft(a)
             qout[iwire] = fft.ifft(a*self.kernel)[:self.tsize].real
         return qout
