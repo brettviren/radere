@@ -31,6 +31,8 @@ def test_timing():
     '''
     print ('\n')
     rel = doit("numpy")
+    doit("cupy", rel)
+    doit("cupy", rel)
     doit("cpu", rel)
     doit("cuda", rel)
     doit("cuda", rel)

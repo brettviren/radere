@@ -73,7 +73,7 @@ class Transport:
         out = amod.vstack([
             t,
             q,
-            self.planex + amod.zeros_like(x),
+            self.planex + aots.zeros_like(x),
             depos[:,3],
             depos[:,4],
             dL,
