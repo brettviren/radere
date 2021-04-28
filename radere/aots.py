@@ -9,6 +9,13 @@ import numpy
 import torch
 import cupy
 
+def device(aot):
+    if is_torch(aot):
+        return str(aot.device)
+    if is_cupy(aot):
+        return 'cupy'
+    return 'numpy'
+
 def is_numpy(aot):
     return isinstance(aot, numpy.ndarray)
 
@@ -46,10 +53,20 @@ def extend(aot, newsize, **kwds):
     '''
     Return new array of newsize with aot set on it lower corner.
     '''
-    new = mod(aot).zeros(newsize)
+    new = zeros(newsize, device=device(aot))
     ss = tuple([slice(0, min(m)) for m in zip(aot.shape, new.shape)])
     new[ss] = aot[ss]
     return new
+
+def zeros(shape, device='numpy'):
+    '''
+    Return zeros of shape on device
+    '''
+    if device in ('cpu', 'cuda'):
+        return torch.zeros(shape, device=device, requires_grad = False)
+    if device == 'cupy':
+        return cupy.zeros(shape)
+    return numpy.zeros(shape)
 
 def zeros_like(aot):
     return mod(aot).zeros_like(aot)
@@ -66,7 +83,7 @@ def load_array(filename, aname, device='numpy'):
         return arr
     if device == 'cupy':
         return cupy.array(arr)
-    return torch.tensor(arr, device=device)
+    return torch.tensor(arr, device=device, requires_grad = False)
 
 def cast(aot, type):
     '''
