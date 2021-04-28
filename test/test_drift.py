@@ -5,12 +5,14 @@ from radere.drift import Transport
 from radere import units, aots
 
 
+data_file = "data/muon-depos.npz"
+
 def doit(device, rel=1.0):
     
     refpln_at = 10*units.cm
     tr = Transport(refpln_at)
     t0 = time()
-    dd = aots.load_array("data/haiwang-depos.npz", "depo_data_0", device)
+    dd = aots.load_array(data_file, "depo_data_0", device)
     t1 = time()
     ddd = tr(dd)
     t2 = time()    

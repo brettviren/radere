@@ -1,9 +1,14 @@
 #!/usr/bin/env python
+'''
+Convolve images
+'''
+
 import os
 import numpy
 from radere.simpleconv import ForwardHalf, SumBackwardHalf, LongConv
 from radere.images import random_filename, image, sample
 
+# relies on a collection of images.
 image_dir = "/home/bv/Desktop/bkg"
 
 def test_random():
@@ -40,3 +45,7 @@ def test_random():
     eight = normed.astype(numpy.uint8)
     print("saving:", outname, eight.dtype, eight.shape)
     image.imsave(outname, eight, cmap='gray')
+
+if '__main__' == __name__:
+    test_random()
+    
