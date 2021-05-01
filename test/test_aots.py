@@ -21,3 +21,5 @@ def test_load():
     t4 = time()
 
     print(f'numpy: {t1-t0}, cuda1: {t2-t1}, cuda2: {t3-t2}, cpu: {t4-t3}')
+
+

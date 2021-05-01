@@ -17,24 +17,42 @@ def device(aot):
     return 'numpy'
 
 def is_numpy(aot):
+    if isinstance(aot, str) and aot == 'numpy':
+        return True
     return isinstance(aot, numpy.ndarray)
 
 def is_torch(aot):
+    if isinstance(aot, str) and aot in ('torch','cuda','cpu'):
+        return True
     return isinstance(aot, torch.Tensor)
 
 def is_cupy(aot):
+    if isinstance(aot, str) and aot == 'cupy':
+        return True
     # maybe a more proper type?
     return isinstance(aot, cupy._core.core.ndarray)
 
-def mod(aot):
+def mod(aotod):
     '''
-    Return native module for aot.
+    Return native module for array or tensor or device
     '''
-    if is_torch(aot):
+    if is_torch(aotod):
         return torch
-    if is_cupy(aot):
+    if is_cupy(aotod):
         return cupy
-    return numpy
+    if is_numpy(aotod):
+        return numpy
+    raise ValueError(f'no module found associated with {aotod}')
+
+def aot(dat, device='numpy', **kwds):
+    '''
+    Return an array or tensor according to device
+    '''
+    if is_torch(device):
+        if device == 'torch':
+            device = 'cpu'
+        return torch.tensor(dat, device=device, requires_grad = False)
+    return mod(device).array(dat, **kwds)
 
 def size(aot):
     if is_torch(aot):

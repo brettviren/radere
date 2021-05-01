@@ -107,7 +107,7 @@ us = microsecond
 #
 # Electric charge [Q]
 #
-eplus = 1.  # positron charge
+e = eplus = 1.  # positron charge
 e_SI  = 1.602176487e-19 # positron charge in coulomb
 coulomb = eplus/e_SI # coulomb = 6.24150 e+18 * eplus
 fC = 1.0e-15*coulomb

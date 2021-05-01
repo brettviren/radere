@@ -3,6 +3,7 @@
 Thanks related to bulk drifting
 '''
 from radere import units, aots
+from radere.depos import Depos
 
 default_speed = 1.6*units.mm/units.us
 # depends on LAr purity
@@ -10,7 +11,6 @@ default_lifetime = 8 * units.ms
 # arXiv:1508.07059v2
 default_DL = 7.2 * units.centimeter2 / units.second
 default_DT = 12.0 * units.centimeter2 / units.second
-
 
 class Transport:
     '''
@@ -32,12 +32,10 @@ class Transport:
 
     def __call__(self, depos):
         '''
-        Transport depos, return time ordered (N,7)
+        Transport depos.
         '''
-
-        # (t,q,x,y,z,long,tran)
-        q = depos[:,1]
-        x = depos[:,2]
+        q = depos["q"]
+        x = depos["x"]
         dx = x-self.planex
         dt = dx/self.speed
 
@@ -47,8 +45,8 @@ class Transport:
         dtfwd = dt[fwd]
         qfwd = q[fwd]
 
-        dL = depos[:,5]
-        dT = depos[:,6]
+        dL = depos["long"]
+        dT = depos["tran"]
         dLfwd = dL[fwd]
         dTfwd = dT[fwd]
 
@@ -59,7 +57,8 @@ class Transport:
         if self.fluctuate:
             qsign = amod.ones_like(qfwd)
             qsign[qfwd<0] = -1.0
-            dQ = qsign * aots.binomial(aots.cast(amod.abs(qfwd),'int'), absorbprob)
+            dQ = qsign * aots.binomial(aots.cast(amod.abs(qfwd),'int'),
+                                       absorbprob)
         else:
             dQ = qfwd * absorbprob
         q[fwd] = dQ
@@ -68,15 +67,15 @@ class Transport:
         dL[fwd] = amod.sqrt(2.0*self.DL*dtfwd + dLfwd * dLfwd)
         dT[fwd] = amod.sqrt(2.0*self.DT*dtfwd + dTfwd * dTfwd)
         
-        t = depos[:,0] + dt
+        t = depos["t"] + dt
 
         out = amod.vstack([
             t,
             q,
             self.planex + aots.zeros_like(x),
-            depos[:,3],
-            depos[:,4],
+            depos["y"],
+            depos["z"],
             dL,
             dT])
 
-        return out[amod.argsort(t)]
+        return Depos(out[:,amod.argsort(t)])

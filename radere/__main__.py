@@ -22,7 +22,6 @@ def version():
     click.echo(radere.__version__)
 
 
-
 def main():
     cli(obj=None)
 

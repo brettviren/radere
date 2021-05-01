@@ -4,7 +4,7 @@ Raster depos into patches
 '''
 
 import numpy
-from radere import units
+from radere import units, aots
 
 class Raster:
     '''
@@ -37,37 +37,47 @@ class Raster:
     def __call__(self, depos):
         '''
         Return a list of patches, one for each depo.
-
-        (t,q,x,y,z,long,tran)
         '''
-        t = depos[:,0]
-        twid = depos[:,5]*self.nsigma
-        ntmin = numpy.floor((t - twid)/self.tick)
-        ntmax = numpy.ceil ((t + twid)/self.tick)
+        t = depos['t']          # needs to be a Depos
+
+        dlong = depos['long']
+        dtran = depos['tran']
+
+        amod = aots.mod(t)
+        def todev(a):
+            return aots.aot(a, aots.device(t))
+
+        twid = dlong*self.nsigma
+        ntmin = amod.floor((t - twid)/self.tick)
+        ntmax = amod.ceil ((t + twid)/self.tick)
         tmin = ntmin * self.tick
         tmax = ntmax * self.tick
-        nt = numpy.round(ntmax - ntmin).astype('int')
+        nt = amod.round(ntmax - ntmin).astype('int')
         
         # convert to pitch.
-        yz = depos[:,3:5]
-        p = numpy.dot((yz - self.origin), self.pnorm)
-        pwid = depos[:,6]*self.nsigma
+        yz = depos.array[3:5].T
+        p = amod.dot(yz - todev(self.origin), todev(self.pnorm))
+        pwid = dtran*self.nsigma
         # location of min/max in units of number of pitches
-        npmin = numpy.floor((p - pwid)/self.pmag)
-        npmax = numpy.ceil ((p + pwid)/self.pmag)
+        npmin = amod.floor((p - pwid)/self.pmag)
+        npmax = amod.ceil ((p + pwid)/self.pmag)
         pmin = (npmin - 0.5) * self.pmag
         pmax = (npmax + 0.5) * self.pmag
         np = (npmax - npmin + 1).astype('int')*self.nimp
 
-        # enter painful serial code
+        q = depos['q']
         patches = list()
-        for ind, q in enumerate(depos[:,1]):
-            lt = numpy.linspace(tmin[ind], tmax[ind], nt[ind], endpoint=False)
-            lp = numpy.linspace(pmin[ind], pmax[ind], np[ind], endpoint=False)
-            P,T = numpy.meshgrid(lp,lt,indexing='ij')
-            dP = (P-p)/depos[:,6]
-            dT = (T-t)/depos[:,5]
-            patch = q * numpy.exp(-0.5*(dP*dP + dT*dT))
+        for ind in range(len(depos)):
+            print(ind, nt[ind], np[ind])
+            lt = amod.linspace(float(tmin[ind]), float(tmax[ind]),
+                               int(nt[ind]), endpoint=False)
+            lp = amod.linspace(float(pmin[ind]), float(pmax[ind]),
+                               int(np[ind]), endpoint=False)
+            P,T = amod.meshgrid(lp,lt,indexing='ij')
+
+            dT = (T-t[ind])/dlong
+            dP = (P-p[ind])/dtran
+            patch = q[ind] * amod.exp(-0.5*(dP*dP + dT*dT))
             patches.append(patch)
         return (patches, pmin, tmin)
         
