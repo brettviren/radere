@@ -46,23 +46,39 @@ def with_data(device):
     got = driver(depos)
     t2 = time()
 
-    dt1 = (t1-t0)*1e6
-    dt2 = (t2-t1)*1e6
-    print(f'load: {dt1} us, run: {dt2} us')
+    dt1 = (t1-t0)*1e3
+    dt2 = (t2-t1)*1e3
+    print(f'load: {dt1} ms, run: {dt2} ms')
 
-    for count, (patch, pmin, tmin) in enumerate(zip(*got)):
-        print (patch.shape)
-        np,nt = patch.shape
+    tmin = min(got['tmin'])
+    tmax = max(got['tmax'])
+    nt = int(1 + (tmax-tmin)/tick)
+    print ('tbins:', tick, nt, tmin, tmax)
 
-        # left, right, bottom, top
-        extent = [tmin, tmin + nt*tick,
-                  pmin, pmin + np*pick]
+    pmin = min(got['pmin'])
+    pmax = max(got['pmax'])
+    np = int(1 + (pmax-pmin)/pick)
+    print ('pbins:', pick, np, pmin, pmax)
 
-        plt.imshow(patch, extent=extent, aspect='auto');
-    plt.savefig("test_raster_%02d.png" % count)
+    charge = numpy.zeros((np,nt))
+    for ind, patch in enumerate(got['patches']):
+
+        it = int((got['tmin'][ind] - tmin)/tick)
+        ip = int((got['pmin'][ind] - pmin)/pick)
+
+        print ('tbins:', tick, nt, tmin, tmax)
+        print ('pbins:', pick, np, pmin, pmax)
+        print(ind, (ip,it), patch.shape, charge.shape)
+        charge[ip:ip+patch.shape[0],
+               it:it+patch.shape[1]] += patch
+
+    # left, right, bottom, top
+    extent = [tmin, tmax, pmin, pmax]
+    plt.imshow(charge, extent=extent, aspect='auto');
+    plt.savefig(f"test_raster_{ind}.png")
 
 def test_with_data():
-    # with_data('numpy')
+    with_data('numpy')
     #with_data('cupy')
     # with_data('cupy')
     pass

@@ -48,8 +48,8 @@ class Raster:
             return aots.aot(a, aots.device(t))
 
         twid = dlong*self.nsigma
-        ntmin = amod.floor((t - twid)/self.tick)
-        ntmax = amod.ceil ((t + twid)/self.tick)
+        ntmin = amod.floor((t - twid)/self.tick)-1
+        ntmax = amod.ceil ((t + twid)/self.tick)+1
         tmin = ntmin * self.tick
         tmax = ntmax * self.tick
         nt = amod.round(ntmax - ntmin).astype('int')
@@ -61,23 +61,26 @@ class Raster:
         # location of min/max in units of number of pitches
         npmin = amod.floor((p - pwid)/self.pmag)
         npmax = amod.ceil ((p + pwid)/self.pmag)
+        # the actual boundary extended to edge of wire pitch region
         pmin = (npmin - 0.5) * self.pmag
         pmax = (npmax + 0.5) * self.pmag
-        np = (npmax - npmin + 1).astype('int')*self.nimp
+        # number of pick bins, add 1 for the +/- 0.5 above
+        np = ((npmax - npmin + 1) * self.nimp).astype('int')
 
         q = depos['q']
         patches = list()
         for ind in range(len(depos)):
-            print(ind, nt[ind], np[ind])
             lt = amod.linspace(float(tmin[ind]), float(tmax[ind]),
                                int(nt[ind]), endpoint=False)
             lp = amod.linspace(float(pmin[ind]), float(pmax[ind]),
                                int(np[ind]), endpoint=False)
             P,T = amod.meshgrid(lp,lt,indexing='ij')
 
-            dT = (T-t[ind])/dlong
-            dP = (P-p[ind])/dtran
+            dT = (T-t[ind])/dlong[ind]
+            dP = (P-p[ind])/dtran[ind]
             patch = q[ind] * amod.exp(-0.5*(dP*dP + dT*dT))
             patches.append(patch)
-        return (patches, pmin, tmin)
+        return dict(patches=patches,
+                    pmin=pmin, pmax=pmax, np=np,
+                    tmin=tmin, tmax=tmax, nt=nt)
         
