@@ -67,6 +67,9 @@ class Depos:
             return Depo(*self.array[item])
         return Depos(self.array[item])
         
+    def block(self, keys):
+        return numpy.vstack([self[k] for k in keys])
+
     def select(self, selection):
         return Depos(self.array[selection])
 

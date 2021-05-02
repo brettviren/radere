@@ -25,27 +25,32 @@ class Raster:
 
         nimp is number of impact bins across wire region.
         '''
-        self.origin = origin[1:]
+        self.origin = numpy.array(origin[1:])
+        pitch = numpy.array(pitch)
         self.pmag = numpy.sqrt(pitch[1:].dot(pitch[1:]))
         self.pnorm = pitch[1:]/self.pmag
         self.tick = tick
         self.nsigma = nsigma
         self.nimp = nimp
         # pick = pitch tick :)
-        self.pick = self.pmag * self.nimp 
+        self.pick = self.pmag / self.nimp 
 
-    def __call__(self, depos):
+    def __call__(self, depos, device='numpy'):
         '''
         Return a list of patches, one for each depo.
         '''
-        t = depos['t']          # needs to be a Depos
-
-        dlong = depos['long']
-        dtran = depos['tran']
-
-        amod = aots.mod(t)
+        amod = aots.mod(device)
         def todev(a):
-            return aots.aot(a, aots.device(t))
+            return aots.aot(a, dev=device)
+        def get(var):
+            a = depos[var]
+            if device == 'numpy':
+                return numpy.copy(a)
+            return todev(a)
+
+        t = get('t')
+        dlong = get('long')
+        dtran = get('tran')
 
         twid = dlong*self.nsigma
         ntmin = amod.floor((t - twid)/self.tick)-1
@@ -55,7 +60,7 @@ class Raster:
         nt = amod.round(ntmax - ntmin).astype('int')
         
         # convert to pitch.
-        yz = depos.array[3:5].T
+        yz = todev(depos.block(['y','z']).T) # (N,2)
         p = amod.dot(yz - todev(self.origin), todev(self.pnorm))
         pwid = dtran*self.nsigma
         # location of min/max in units of number of pitches

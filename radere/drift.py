@@ -51,7 +51,6 @@ class Transport:
         operation.
         '''
         amod = aots.mod(device)
-
         def get(var):
             a = depos[var]
             if device == 'numpy':
