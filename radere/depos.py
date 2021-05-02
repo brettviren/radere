@@ -1,60 +1,77 @@
 #!/usr/bin/env python3
 '''
-A depo is a 7-tuple:
+A single "depo" is conceptually an n-tuple:
 
-(t,q,x,y,z,long,tran)
+>>> (t,q,x,y,z,long,tran,id)
 
-A collection of depos are in a structured array using the above field
-names.
+The first 7 are floats, and id is an int.  Any transformation of a
+depo should preserve the value of its id in the result.
+
+Note, arrays as processed by this module are only on the 'numpy' "device".
 '''
 
 import numpy
 from collections import namedtuple
 from radere import units
-from radere import aots
+
+fields = ('t','q','x','y','z','long','tran','id')
+
+# Named tuple type
+Depo = namedtuple("Depo", fields)
+
+
+def structure(arr):
+    '''
+    Create a structured depo array.
+    '''
+    if arr.shape[0] == 7:
+        tup = [tuple(d.tolist() + [i]) for i,d in enumerate(arr.T)]
+    elif arr.shape[0] == 8:
+        tup = [tuple(d) for d in arr.T]
+    else:
+        raise ValueError(f'wrong shape array: {arr.shape}')
+    dtype = [(f,'f4') for f in fields]
+    dtype[-1] = ('id','i4')
+    arr = numpy.array(tup, dtype=dtype)
+    arr = numpy.sort(arr, order=['t','x','q'])
+    return arr
 
 class Depos:
     '''
-    A collection of depos
+    A namedtuple-like interface to structured array.
     '''
-    # Access 1D array of these fields
-    Depo = namedtuple("Depo", ('t','q','x','y','z','long','tran'))
-
-    # The underlying as 7xN may be directly used.
-    array = None
 
     def __init__(self, array):
         '''
-        Create depos from 7xN or Nx7 array
+        Create a Depos.
+
+        The array may be raw 7xN or already structured.
         '''
-        if array.shape[0] == 7:
-            self.array = array
-        elif array.shape[1] == 7:
-            self.array = array.T
-        else:
-            raise ValueError("not a depos array")
+        if len(array.shape) == 2:
+            array = structure(array)
+        self.array = array
 
     def __len__(self):
-        return self.array.shape[1]
+        return len(self.array)
 
     def __getattr__(self, key):
-        ind = self.Depo._fields.index(key)
-        return self.array[ind]
+        return self.array[key]
 
     def __contains__(self, item):
-        return item in self.Depo._fields
+        return item in fields
 
     def __getitem__(self, item):
         if isinstance(item, str):
-            item = self.Depo._fields.index(item)
             return self.array[item]
-        return self.Depo(*self.array[:,item])
+        if isinstance(item, int):
+            return Depo(*self.array[item])
+        return Depos(self.array[item])
         
     def select(self, selection):
-        return Depos(self.array[:,selection])
+        return Depos(self.array[selection])
 
 
-def load_wctnpz(filename, ind=0, device='numpy'):
+def load_wctnpz(filename, ind=0):
     '''
     Load depos from WCT file.
 
@@ -70,8 +87,6 @@ def load_wctnpz(filename, ind=0, device='numpy'):
     # select only those depos that are not "prior" depos
     orig = di[2] == 0
     dd = dd[:,orig]
-    if device != 'numpy':
-        dd = aots.aot(dd, device=device)
     return Depos(dd)
 
 
@@ -95,14 +110,16 @@ def random(num, ranges, qdist=None, deltat = units.ms):
     '''
     Return some random depos inside the rectangular ranges
     '''
+    if len(ranges) != 3:
+        raise ValueError('ranges are a 3 pairs spanning X,Y,Z')
     if qdist is None:
         q = numpy.zeros(num) + 1000
     else:
         q = numpy.random.choice(qdist, nblips)
     t = numpy.sort(numpy.random.uniform(0, deltat, num))
-    r = [numpy.random.uniform(r[0], r[1], num) for r in ranges]
+    xyz = [numpy.random.uniform(r[0], r[1], num) for r in ranges]
     dL = numpy.zeros_like(t)
     dT = numpy.zeros_like(t)
-    # (t,q,x,y,z,long,tran)
-    return Depos(numpy.vstack([t,q]+r+[dL,dT]))
+
+    return Depos(numpy.vstack([t,q]+xyz+[dL,dT]))
 

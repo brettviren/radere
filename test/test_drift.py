@@ -1,5 +1,6 @@
 #!/usr/bin/env pytest
 
+import numpy
 from time import time
 from radere.drift import Transport
 from radere import units, aots
@@ -12,9 +13,9 @@ def doit(device, rel=1.0):
     refpln_at = 10*units.cm
     tr = Transport(refpln_at)
     t0 = time()
-    dd = load_wctnpz(data_file, device=device)
+    dd = load_wctnpz(data_file)
     t1 = time()
-    ddd = tr(dd)
+    ddd = tr(dd, device)
     t2 = time()    
     dt1us = (t1-t0)*1e6
     dt2us = (t2-t1)*1e6
@@ -37,31 +38,63 @@ def test_timing():
     doit("cuda", rel)
     doit("cuda", rel)
 
-import matplotlib.pyplot as plt
 
-def plot_drifted(depos):
-
-    import radere.units
+def plot_drifted(dinit, dfini):
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
 
     toplot=[('t','us'), ('q','e'),('x','mm'),('y','mm'),('z','mm'),
-            ('long','mm'),('tran','mm')]
+            ('long','us'),('tran','mm')]
 
-    fig, axes = plt.subplots(nrows=7, figsize=(8.5,11))
-    for ind, tp in enumerate(toplot):
-        var,unit = tp
-        norm = getattr(radere.units, unit)
-        val = depos[var]/norm
-        axes[ind].hist(val)
-        axes[ind].set_xlabel(f'{var} [{unit}]')
-    plt.tight_layout()
-    plt.savefig("test_drift.pdf")
+    dfinis = dfini.select(numpy.argsort(dfini.id))
+
+    nbins = 100
+
+    with PdfPages("test_drift.pdf") as pdf:
+
+        for name,depos in [('dinit',dinit), ('dfini',dfini), ('dfinis',dfinis)]:
+
+            fig, axes = plt.subplots(nrows=7, figsize=(8.5,11))
+            axes[0].set_title(name)
+            for ind, tp in enumerate(toplot):
+                var,unit = tp
+                norm = getattr(units, unit)
+                val = depos[var]/norm
+                axes[ind].hist(val, nbins)
+                axes[ind].set_xlabel(f'{var} [{unit}]')
+            plt.tight_layout()
+            pdf.savefig(plt.gcf())
+
+        fig, axes = plt.subplots(nrows=4, figsize=(8.5,11))        
+        axes[0].plot(dfini.id, dfini.t/units.us)
+        axes[0].plot(dfinis.id, dfinis.t/units.us)
+        axes[0].set_xlabel('times [us] vs ids')
+        axes[1].hist((dfinis.x - dinit.x)/units.mm, nbins)
+        axes[1].set_xlabel('dx [mm]')
+
+        speed_unit = units.mm/units.us
+        axes[2].hist((dfinis.x-dinit.x)/(dfinis.t-dinit.t)/speed_unit)
+        axes[1].set_xlabel('speed [mm/us]')
+
+        nonzero = dinit.q!=0
+        qi = dinit.q[nonzero]
+        qf = dfinis.q[nonzero]
+        x = dinit.x[nonzero]
+        axes[3].scatter(x, (qi-qf)/qi, s=.1)
+        axes[3].set_ylim(0,1)
+
+        plt.tight_layout()
+        pdf.savefig(plt.gcf())
+
+
 
 def test_plots():
 
     rel,depo_init,depo_fini = doit("numpy")    
     assert len(depo_init) == len(depo_fini)
+    assert numpy.all(depo_init.x != depo_fini.x)
 
-    plot_drifted(depo_fini)
+    plot_drifted(depo_init, depo_fini)
 
 if '__main__' == __name__:
     test_timing()

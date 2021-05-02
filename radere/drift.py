@@ -2,6 +2,7 @@
 '''
 Thanks related to bulk drifting
 '''
+import numpy
 from radere import units, aots
 from radere.depos import Depos
 
@@ -22,20 +23,44 @@ class Transport:
     def __init__(self, planex,
                  speed=default_speed,
                  lifetime=default_lifetime,
-                 DL=default_DL, DT=default_DT,fluctuate=True):
+                 DL=default_DL, DT=default_DT,
+                 fluctuate=True, temporal=True):
+        '''
+        Create a drift transport function.
+
+        If temporal=True, interpret the "long" value in units of time.
+        '''
+
         self.speed = speed
         self.lifetime = lifetime
         self.DL = DL
         self.DT = DT
         self.planex = planex
         self.fluctuate = fluctuate
+        self.long_units = 1.0
+        if temporal:
+            self.long_units = 1.0/speed
 
-    def __call__(self, depos):
+    def __call__(self, depos, device='numpy'):
         '''
         Transport depos.
+
+        Depos should be as radere.depos.structured or a .Depos object.
+
+        Specifying a device will move arrays to there prior to
+        operation.
         '''
-        q = depos["q"]
-        x = depos["x"]
+        amod = aots.mod(device)
+
+        def get(var):
+            a = depos[var]
+            if device == 'numpy':
+                return numpy.copy(a)
+            return aots.aot(a, dev=device)
+
+        t = get("t")
+        q = get("q")
+        x = get("x")
         dx = x-self.planex
         dt = dx/self.speed
 
@@ -45,12 +70,11 @@ class Transport:
         dtfwd = dt[fwd]
         qfwd = q[fwd]
 
-        dL = depos["long"]
-        dT = depos["tran"]
-        dLfwd = dL[fwd]
+        dL = get("long")
+        dT = get("tran")
+        # we must have spatial units here
+        dLfwd = dL[fwd]/self.long_units 
         dTfwd = dT[fwd]
-
-        amod = aots.mod(dtfwd)
 
         # find change in charge due to absorbtion for fwd drift
         absorbprob = 1-amod.exp(-dtfwd / self.lifetime)
@@ -67,15 +91,18 @@ class Transport:
         dL[fwd] = amod.sqrt(2.0*self.DL*dtfwd + dLfwd * dLfwd)
         dT[fwd] = amod.sqrt(2.0*self.DT*dtfwd + dTfwd * dTfwd)
         
-        t = depos["t"] + dt
+        t += dt
 
-        out = amod.vstack([
+        rows = [
             t,
             q,
             self.planex + aots.zeros_like(x),
-            depos["y"],
-            depos["z"],
-            dL,
-            dT])
+            get("y"),
+            get("z"),
+            dL*self.long_units, # restore units
+            dT,
+            get("id"),
+        ]
 
-        return Depos(out[:,amod.argsort(t)])
+        out = numpy.vstack([aots.aot(r, dev='numpy') for r in rows])
+        return Depos(out)

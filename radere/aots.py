@@ -44,15 +44,36 @@ def mod(aotod):
         return numpy
     raise ValueError(f'no module found associated with {aotod}')
 
-def aot(dat, device='numpy', **kwds):
+def aot(dat, dev='numpy', **kwds):
     '''
-    Return an array or tensor according to device
+    Return posibly new aot by copying dat to device.
     '''
-    if is_torch(device):
-        if device == 'torch':
-            device = 'cpu'
-        return torch.tensor(dat, device=device, requires_grad = False)
-    return mod(device).array(dat, **kwds)
+    # Worse case, a dense (to x from) matrix must be implemented.
+    # But we will only support the diagonal and to/from numpy.
+
+    # the diagonal
+    if dev == device(dat):
+        return dat
+
+    # from numpy
+    if is_numpy(dat):
+        if is_torch(dev):
+            if dev == 'torch':
+                dev = 'cpu'
+            return torch.tensor(dat, device=dev, requires_grad = False)
+        if is_cupy(dev):
+            return cupy.array(dat, **kwds)
+
+    # to numpy:
+    if is_numpy(dev):
+        if is_cupy(dat):
+            return mod(dev).array(dat.get(), **kwds)
+
+        if is_torch(dat):
+            return dat.cpu().numpy()
+        
+    # All else are a hail mary
+    return mod(dev).array(dat, **kwds)
 
 def size(aot):
     if is_torch(aot):
