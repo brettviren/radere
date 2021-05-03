@@ -40,6 +40,11 @@ class Structured:
         for name, array in arrays.items():
             self.stack(name, array)
 
+    def __str__(self):
+        names = ','.join(self.fields)
+        length = len(self)
+        return f'Structured([{names}] x {length})'
+
     def intern(self, sarray):
         '''
         Intern a 2D structured array or dict of 1D arrays.

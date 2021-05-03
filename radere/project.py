@@ -3,29 +3,34 @@
 Project (verb) depos from 3-space to response space
 '''
 
-import math
-import numpy
-
-
+from radere import aots
+from radere.util import magunit, Structured
 
 class Depos2PT:
-    def __init__(self, origin, pitch, velocity):
+    def __init__(self, origin, pitch, speed):
         '''
         Create a projection of depos from 3-space to P-T space
 
-        Arguments are 3-vectors.
-
-        - origin :: location of centerof "wire zero"
-        - pitch :: relative vector between two wires along pitch 
-        - velocity :: nominal drift velocity
+        - origin :: 3-location of center of "wire zero"
+        - pitch :: 3-displacement of two wires
+        - speed :: nominal drift speed
         '''
-        self.origin = numpy.array(origin)
-        self.pitch, self.pdir = normunit(pitch)
-        self.speed, self.drift = normunit(velocity)
+        self.origin = origin
+        self.pitch, self.pdir = magunit(pitch)
+        self.speed = speed
         
     def __call__(self, depos):
 
+        assert(aots.device(depos.t) == aots.device(self.origin))
+
+        amod = aots.mod(depos.t)
+
         xyz = depos.block(['x','y','z']).T
         rel = xyz - self.origin
-        pitches = numpy.dot(rel, self.pdir)
-............come back here after making general namedtuple array        
+        pitches = amod.dot(rel, self.pdir)
+        return Structured('Drifted',
+                          p = pitches,
+                          t = depos.t,
+                          dp = depos.tran,
+                          dt = depos.long / self.speed,
+                          id = depos.id)
