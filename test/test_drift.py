@@ -13,9 +13,15 @@ def doit(device, rel=1.0):
     refpln_at = 10*units.cm
     tr = Transport(refpln_at)
     t0 = time()
-    dd = load_wctnpz(data_file)
+    dd = load_wctnpz(data_file, device=device)
+    assert (aots.device(dd.t) == device)
+    assert (aots.device(dd.x) == device)
+    assert (aots.device(dd.id) == device)
+    assert len(dd) > 8
     t1 = time()
-    ddd = tr(dd, device)
+    ddd = tr(dd)
+    print(f'{device}: t device {aots.device(ddd.t)}')
+    assert (aots.device(ddd.t) == device)
     t2 = time()    
     dt1us = (t1-t0)*1e6
     dt2us = (t2-t1)*1e6
@@ -46,7 +52,7 @@ def plot_drifted(dinit, dfini):
     toplot=[('t','us'), ('q','e'),('x','mm'),('y','mm'),('z','mm'),
             ('long','us'),('tran','mm')]
 
-    dfinis = dfini.select(numpy.argsort(dfini.id))
+    dfinis = dfini[numpy.argsort(dfini.id)]
 
     nbins = 100
 

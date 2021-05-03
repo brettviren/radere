@@ -5,7 +5,7 @@ from time import time
 import matplotlib.pyplot as plt
 from radere.raster import Raster
 from radere import units, aots
-from radere.depos import Depos, load_wctnpz as load_depos
+from radere.depos import load_wctnpz as load_depos, new as make_depos
 
 tick = 0.5*units.us
 pitch = 5*units.mm
@@ -19,7 +19,7 @@ def driver(depos):
     return rast(depos)
 
 def test_single():
-    depos = Depos(numpy.array([
+    depos = make_depos(numpy.array([
         #t, q  x, y,z  dL, dT
         [0,10, 0,10,0, 1*units.us, 1*units.mm]
     ]).T)
@@ -68,9 +68,9 @@ def with_data(device):
         it = int((got['tmin'][ind] - tmin)/tick)
         ip = int((got['pmin'][ind] - pmin)/pick)
 
-        # print ('tbins:', tick, nt, tmin, tmax)
-        # print ('pbins:', pick, np, pmin, pmax)
-        # print(ind, (ip,it), patch.shape, charge.shape)
+        print ('tbins:', tick, nt, tmin, tmax)
+        print ('pbins:', pick, np, pmin, pmax)
+        print(ind, (ip,it), patch.shape, charge.shape)
         charge[ip:ip+patch.shape[0],
                it:it+patch.shape[1]] += patch
 
@@ -92,7 +92,7 @@ def test_specific():
     assert rast.pmag == pitch
     assert rast.pick == 0.1*pitch
 
-    depos = Depos(numpy.array([
+    depos = make_depos(numpy.array([
         #t, q  x, y,z  dL, dT
         [0,10, 0,10,0, 1*units.us, 1*units.mm]
     ]).T)

@@ -2,9 +2,8 @@
 '''
 Thanks related to bulk drifting
 '''
-import numpy
 from radere import units, aots
-from radere.depos import Depos
+from radere.depos import new as make_depos
 
 default_speed = 1.6*units.mm/units.us
 # depends on LAr purity
@@ -24,11 +23,9 @@ class Transport:
                  speed=default_speed,
                  lifetime=default_lifetime,
                  DL=default_DL, DT=default_DT,
-                 fluctuate=True, temporal=True):
+                 fluctuate=True):
         '''
         Create a drift transport function.
-
-        If temporal=True, interpret the "long" value in units of time.
         '''
 
         self.speed = speed
@@ -38,28 +35,17 @@ class Transport:
         self.planex = planex
         self.fluctuate = fluctuate
         self.long_units = 1.0
-        if temporal:
-            self.long_units = 1.0/speed
 
-    def __call__(self, depos, device='numpy'):
+    def __call__(self, depos):
         '''
         Transport depos.
-
-        Depos should be as radere.depos.structured or a .Depos object.
-
-        Specifying a device will move arrays to there prior to
-        operation.
         '''
-        amod = aots.mod(device)
-        def get(var):
-            a = depos[var]
-            if device == 'numpy':
-                return numpy.copy(a)
-            return aots.aot(a, dev=device)
+        def new(var):           # want copy
+            return aots.new(depos[var])
 
-        t = get("t")
-        q = get("q")
-        x = get("x")
+        t = new("t")
+        q = new("q")
+        x = depos.x
         dx = x-self.planex
         dt = dx/self.speed
 
@@ -69,11 +55,13 @@ class Transport:
         dtfwd = dt[fwd]
         qfwd = q[fwd]
 
-        dL = get("long")
-        dT = get("tran")
-        # we must have spatial units here
-        dLfwd = dL[fwd]/self.long_units 
+        dL = new("long")
+        dT = new("tran")
+
+        dLfwd = dL[fwd]
         dTfwd = dT[fwd]
+
+        amod = aots.mod(t)
 
         # find change in charge due to absorbtion for fwd drift
         absorbprob = 1-amod.exp(-dtfwd / self.lifetime)
@@ -84,6 +72,7 @@ class Transport:
                                        absorbprob)
         else:
             dQ = qfwd * absorbprob
+
         q[fwd] = dQ
 
         # find broadening
@@ -92,16 +81,16 @@ class Transport:
         
         t += dt
 
-        rows = [
-            t,
-            q,
-            self.planex + aots.zeros_like(x),
-            get("y"),
-            get("z"),
-            dL*self.long_units, # restore units
-            dT,
-            get("id"),
-        ]
+        rows = dict(
+            t=t,
+            q=q,
+            x=self.planex + aots.zeros_like(x),
+            y=depos.y,
+            z=depos.x,
+            long=dL,
+            tran=dT,
+            id=depos.id,
+        )
 
-        out = numpy.vstack([aots.aot(r, dev='numpy') for r in rows])
-        return Depos(out)
+        ret = make_depos(rows, aots.device(depos.t))
+        return ret

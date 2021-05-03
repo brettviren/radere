@@ -11,70 +11,56 @@ Note, arrays as processed by this module are only on the 'numpy' "device".
 '''
 
 import numpy
-from collections import namedtuple
-from radere import units
+from radere import units, util, aots
 
-fields = ('t','q','x','y','z','long','tran','id')
-
-# Named tuple type
-Depo = namedtuple("Depo", fields)
-
-
-def structure(arr):
+# fixme: allow cupy/torch as input without needing explicit device
+def new(sarr, device='numpy'):
     '''
-    Create a structured depo array.
+    Create a structured depo array with 7xN, 8xN or 7/8 element dict
     '''
-    if arr.shape[0] == 7:
-        tup = [tuple(d.tolist() + [i]) for i,d in enumerate(arr.T)]
-    elif arr.shape[0] == 8:
-        tup = [tuple(d) for d in arr.T]
+    fields = ('t','q','x','y','z','long','tran')
+
+    if isinstance(sarr, dict):
+        for field in fields:
+            sarr[field] = aots.new(sarr[field], dtype='f4',
+                                   device=device)
+        if 'id' in sarr:
+            sarr['id'] = aots.new(sarr['id'], dtype='i4',
+                                  device=device)
+
+    elif isinstance(sarr, numpy.ndarray):
+        d = dict()
+        if not sarr.dtype.fields:
+            for index, field in enumerate(fields):
+                d[field] = aots.new(sarr[index], dtype='f4',
+                                    device=device)
+            if len(sarr) == 8:
+                d["id"] = aots.new(sarr[7], dtype='i4',
+                                   device=device)
+
+        else:
+            for field in fields:
+                d[field] = aots.new(sarr[field], dtype='f4',
+                                    device=device)
+            if 'id' in d:
+                d['id'] = aots.new(range(len(d['t'])), dtype='i4',
+                                   device=device)
+                
+
+        sarr = d
+        if 'id' not in sarr:
+            sarr['id'] = aots.new(range(len(sarr['t'])), dtype='i4',
+                                  device=device)
+
     else:
-        raise ValueError(f'wrong shape array: {arr.shape}')
-    dtype = [(f,'f4') for f in fields]
-    dtype[-1] = ('id','i4')
-    arr = numpy.array(tup, dtype=dtype)
-    arr = numpy.sort(arr, order=['t','x','q'])
-    return arr
+        raise TypeError(f'unknown depos array type {type(sarr)}')
 
-class Depos:
-    '''
-    A namedtuple-like interface to structured array.
-    '''
-
-    def __init__(self, array):
-        '''
-        Create a Depos.
-
-        The array may be raw 7xN or already structured.
-        '''
-        if len(array.shape) == 2:
-            array = structure(array)
-        self.array = array
-
-    def __len__(self):
-        return len(self.array)
-
-    def __getattr__(self, key):
-        return self.array[key]
-
-    def __contains__(self, item):
-        return item in fields
-
-    def __getitem__(self, item):
-        if isinstance(item, str):
-            return self.array[item]
-        if isinstance(item, int):
-            return Depo(*self.array[item])
-        return Depos(self.array[item])
-        
-    def block(self, keys):
-        return numpy.vstack([self[k] for k in keys])
-
-    def select(self, selection):
-        return Depos(self.array[selection])
+    unsrt = util.Structured('Depo', **sarr)
+    srt = unsrt[aots.argsort(sarr['t'])]
+    return srt
 
 
-def load_wctnpz(filename, ind=0):
+def load_wctnpz(filename, ind=0, device='numpy'):
     '''
     Load depos from WCT file.
 
@@ -90,7 +76,7 @@ def load_wctnpz(filename, ind=0):
     # select only those depos that are not "prior" depos
     orig = di[2] == 0
     dd = dd[:,orig]
-    return Depos(dd)
+    return new(dd, device)
 
 
 def contained(depos, ranges):
@@ -102,14 +88,14 @@ def contained(depos, ranges):
     for idim,dim in enumerate("xyz"):
         coord = depos[dim]
         hi = coord >= ranges[idim][0]
+        depos = depos[hi]
+        coord = depos[dim]
         lo = coord < ranges[idim][1]
-        hilo = numpy.vstack((hi,lo)).T
-        inside = numpy.apply_along_axis(all, 1, numpy.vstack((hi,lo)).T)
-        depos = depos.select(inside)
+        depos = depos[lo]
     return depos
 
 
-def random(num, ranges, qdist=None, deltat = units.ms):
+def random(num, ranges, qdist=None, deltat = units.ms, device='numpy'):
     '''
     Return some random depos inside the rectangular ranges
     '''
@@ -124,5 +110,5 @@ def random(num, ranges, qdist=None, deltat = units.ms):
     dL = numpy.zeros_like(t)
     dT = numpy.zeros_like(t)
 
-    return Depos(numpy.vstack([t,q]+xyz+[dL,dT]))
+    return new(numpy.vstack([t,q]+xyz+[dL,dT]), device=device)
 

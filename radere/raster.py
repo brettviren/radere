@@ -35,32 +35,27 @@ class Raster:
         # pick = pitch tick :)
         self.pick = self.pmag / self.nimp 
 
-    def __call__(self, depos, device='numpy'):
+    def __call__(self, depos):
         '''
         Return a list of patches, one for each depo.
         '''
+        device = aots.device(depos.t)
         amod = aots.mod(device)
         def todev(a):
-            return aots.aot(a, dev=device)
-        def get(var):
-            a = depos[var]
-            if device == 'numpy':
-                return numpy.copy(a)
-            return todev(a)
+            return aots.new(a, device=device)
 
-        t = get('t')
-        dlong = get('long')
-        dtran = get('tran')
+        dlong = depos.long
+        dtran = depos.tran
 
         twid = dlong*self.nsigma
-        ntmin = amod.floor((t - twid)/self.tick)-1
-        ntmax = amod.ceil ((t + twid)/self.tick)+1
+        ntmin = amod.floor((depos.t - twid)/self.tick)-1
+        ntmax = amod.ceil ((depos.t + twid)/self.tick)+1
         tmin = ntmin * self.tick
         tmax = ntmax * self.tick
         nt = amod.round(ntmax - ntmin).astype('int')
         
         # convert to pitch.
-        yz = todev(depos.block(['y','z']).T) # (N,2)
+        yz = depos.block(['y','z']).T # (N,2)
         p = amod.dot(yz - todev(self.origin), todev(self.pnorm))
         pwid = dtran*self.nsigma
         # location of min/max in units of number of pitches
@@ -81,7 +76,7 @@ class Raster:
                                int(np[ind]), endpoint=False)
             P,T = amod.meshgrid(lp,lt,indexing='ij')
 
-            dT = (T-t[ind])/dlong[ind]
+            dT = (T-depos.t[ind])/dlong[ind]
             dP = (P-p[ind])/dtran[ind]
             patch = q[ind] * amod.exp(-0.5*(dP*dP + dT*dT))
             patches.append(patch)

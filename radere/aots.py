@@ -11,10 +11,13 @@ import cupy
 
 def device(aot):
     if is_torch(aot):
-        return str(aot.device)
+        return str(aot.device).split(":")[0]
     if is_cupy(aot):
         return 'cupy'
-    return 'numpy'
+    if is_numpy(aot):
+        return 'numpy'
+    None
+isdevice = device
 
 def is_numpy(aot):
     if isinstance(aot, str) and aot == 'numpy':
@@ -44,36 +47,66 @@ def mod(aotod):
         return numpy
     raise ValueError(f'no module found associated with {aotod}')
 
-def aot(dat, dev='numpy', **kwds):
-    '''
-    Return posibly new aot by copying dat to device.
-    '''
-    # Worse case, a dense (to x from) matrix must be implemented.
-    # But we will only support the diagonal and to/from numpy.
+torch_annoyance = {
+    "bool": torch.bool,
+    "uint8": torch.uint8,
+    "u1": torch.uint8,
+    "int8": torch.int8,
+    "i1": torch.int8,
+    "int16": torch.int16,
+    "i2": torch.int16,
+    "int32": torch.int32,
+    "i4": torch.int32,
+    "int64": torch.int64,
+    "i8": torch.int64,
+    "float16": torch.float16,
+    "f2": torch.float16,
+    "float32": torch.float32,
+    "f4": torch.float32,
+    "float64": torch.float64,
+    "f8": torch.float64,
+    "complex64": torch.complex64,
+    "c8": torch.complex64,
+    "complex128": torch.complex128,
+    "c16": torch.complex128
+}
 
-    # the diagonal
-    if dev == device(dat):
-        return dat
+def new(dat, device=None, **kwds):
+    '''
+    Return new aot by copying dat to device.
+    '''
+    if device is None:
+        device = isdevice(dat) or 'numpy'
 
-    # from numpy
+    # Numpy or array-like native is common format
     if is_numpy(dat):
-        if is_torch(dev):
-            if dev == 'torch':
-                dev = 'cpu'
-            return torch.tensor(dat, device=dev, requires_grad = False)
-        if is_cupy(dev):
-            return cupy.array(dat, **kwds)
+        arr = dat
+    elif is_torch(dat):
+        arr = dat.cpu().numpy()
+    elif is_cupy(dat):
+        arr = dat.get()
+    else:
+        arr = dat               # native Python object
 
-    # to numpy:
-    if is_numpy(dev):
-        if is_cupy(dat):
-            return mod(dev).array(dat.get(), **kwds)
+    if is_numpy(device):
+        return numpy.array(arr, **kwds)
+    if is_cupy(device):
+        return cupy.array(arr, **kwds)
+    if is_torch(device):
+        if device == 'torch':
+            device = 'cpu'
+        kwds['device'] = device
+        if 'dtype' in kwds:
+            dtype = kwds.pop('dtype')
+            if isinstance(dtype, str):
+                dtype = dtype.split('.')[-1]
+                kwds['dtype'] = torch_annoyance[dtype]
+            elif isinstance(dtype, torch.dtype):
+                kwds['dtype'] = dtype
 
-        if is_torch(dat):
-            return dat.cpu().numpy()
-        
-    # All else are a hail mary
-    return mod(dev).array(dat, **kwds)
+        return torch.tensor(arr, **kwds)
+
+    raise ValueError(f'unknown device {device}')
 
 def size(aot):
     if is_torch(aot):
@@ -150,3 +183,17 @@ def binomial(narr, parr):
     from torch.distributions.binomial import Binomial
     b = Binomial(narr, parr)
     return b.sample()
+
+def take_along_axis(arr, indices, axis=None):
+    if is_cupy(arr) or is_numpy(arr):
+        return mod(arr).take_along_axis(arr, indices, axis)
+    # punt for now
+    old_device = device(arr)
+    arr = new(arr, device='numpy')
+    indices = new(indices, device='numpy')
+    arr = numpy.take_along_axis(arr, indices, axis)
+    return new(arr, device=old_device)
+
+def argsort(a, axis=-1):
+    return mod(a).argsort(a, axis)
+    
