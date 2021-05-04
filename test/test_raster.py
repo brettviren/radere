@@ -3,104 +3,70 @@
 import numpy
 from time import time
 import matplotlib.pyplot as plt
-from radere.raster import Raster
+
 from radere import units, aots
-from radere.depos import load_wctnpz as load_depos, new as make_depos
+from radere.depos import load_wctnpz as load_depos
+from radere.drift import Transport
+from radere.project import Depos2PT
+from radere.raster import Raster
 
 tick = 0.5*units.us
 pitch = 5*units.mm
 nimp = 10
 pick = pitch/nimp
+impact = 1
+speed = 1.6*units.mm/units.us
 
-def driver(depos):
-    rast = Raster(numpy.array([0,0,0]), numpy.array([0,1,0]),
-                  tick, pitch)
-    print(type(depos))
-    return rast(depos)
-
-def test_single():
-    depos = make_depos(numpy.array([
-        #t, q  x, y,z  dL, dT
-        [0,10, 0,10,0, 1*units.us, 1*units.mm]
-    ]).T)
-    got = driver(depos)
-
-    print (got)
-    for count, patch in enumerate(got['patches']):
-        # print (patch.shape)
-        # np,nt = patch.shape
-
-        # # left, right, bottom, top
-        # extent = [tmin, tmin + nt*tick,
-        #           pmin, pmin + np*pick]
-
-        # plt.imshow(patch, extent=extent, aspect='auto');
-        plt.imshow(patch, aspect='auto')
-        plt.savefig("test_raster_%02d.png" % count)
+def run(device):
+    import test_project
+    proj = test_project.run(device)
+    pdat = Raster(impact, pitch)
+    
+def test_run():
+    run('numpy')
 
 
 depos_file = "data/muon-depos.npz"
 
 def with_data(device):
     t0 = time()
-    depos = load_depos(depos_file)
+    depos = load_depos(depos_file, device=device)
+
     t1 = time()
-    got = driver(depos)
+    refpln_at = 10*units.cm
+    drift = Transport(refpln_at)
+    drifted = drift(depos)
+
     t2 = time()
+    p = pitch
+    project = Depos2PT(aots.new([0,0,0], device=device),
+                       aots.new([0,p,0], device=device),
+                       speed)
+    proj = project(drifted)
+
+
+    t3 = time()
+    raster = Raster(impact, pitch)
+    rast = raster(proj)
+
+    t4 = time()
 
     dt1 = (t1-t0)*1e3
     dt2 = (t2-t1)*1e3
-    print(f'load: {dt1} ms, run: {dt2} ms')
+    dt3 = (t3-t2)*1e3
+    dt4 = (t4-t3)*1e3
+    print(f'{device}:\t{dt1:10.3f} ms, {dt2:10.3f} ms, {dt3:10.3f} ms, {dt4:10.3f} ms')
 
-    tmin = min(got['tmin'])
-    tmax = max(got['tmax'])
-    nt = int(1 + (tmax-tmin)/tick)
-    print ('tbins:', tick, nt, tmin, tmax)
-
-    pmin = min(got['pmin'])
-    pmax = max(got['pmax'])
-    np = int(1 + (pmax-pmin)/pick)
-    print ('pbins:', pick, np, pmin, pmax)
-
-    charge = numpy.zeros((np,nt))
-    for ind, patch in enumerate(got['patches']):
-
-        it = int((got['tmin'][ind] - tmin)/tick)
-        ip = int((got['pmin'][ind] - pmin)/pick)
-
-        print ('tbins:', tick, nt, tmin, tmax)
-        print ('pbins:', pick, np, pmin, pmax)
-        print(ind, (ip,it), patch.shape, charge.shape)
-        charge[ip:ip+patch.shape[0],
-               it:it+patch.shape[1]] += patch
-
-    # left, right, bottom, top
-    extent = [tmin, tmax, pmin, pmax]
-    plt.imshow(charge, extent=extent, aspect='auto');
-    plt.savefig(f"test_raster_{ind}.png")
 
 def test_with_data():
+    print()
     with_data('numpy')
-    #with_data('cupy')
-    # with_data('cupy')
-    pass
+    with_data('cpu')
+    with_data('cuda')
+    with_data('cuda')
+    with_data('cupy')
+    with_data('cupy')
 
-def test_specific():
-    
-    rast = Raster(numpy.array([0,0,0]), numpy.array([0,pitch,0]))
-
-    assert rast.pmag == pitch
-    assert rast.pick == 0.1*pitch
-
-    depos = make_depos(numpy.array([
-        #t, q  x, y,z  dL, dT
-        [0,10, 0,10,0, 1*units.us, 1*units.mm]
-    ]).T)
-
-    pdata = rast(depos)
-    assert len(pdata['patches']) == 1
-
-    
 
 
 if '__main__' == __name__:

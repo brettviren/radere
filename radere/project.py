@@ -27,8 +27,9 @@ class Depos2PT:
 
         xyz = depos.block(['x','y','z']).T
         rel = xyz - self.origin
-        pitches = amod.dot(rel, self.pdir)
+        pitches = aots.dot(rel, self.pdir)
         return Structured('Drifted',
+                          q = depos.q,
                           p = pitches,
                           t = depos.t,
                           dp = depos.tran,

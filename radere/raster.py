@@ -8,76 +8,79 @@ from radere import units, aots
 
 class Raster:
     '''
-    A component to raster depos to patches.
+    A component to raster depo projections to deinterlaced patches.
     '''
 
-    def __init__(self, origin, pitch, tick=0.5*units.us, nsigma=3, nimp=10):
+    def __init__(self, impact, pitch, tick=0.5*units.us, nsigma=3, nimp=10):
         '''
-        Origin is a 3-D point giving center of wire 0 in the same
-        coordinate system used by the depos.
+        Create a rasterer.
 
-        Pitch is 3-D vector from origin to next wire along pitch
-        direction.
+            - impact :: which of the nimp impacts to deinterlace.
 
-        tick is the time bin
+            - pitch :: the pitch distance between wires
 
-        nsigma is the minimum truncation of the depo gaussian
+            - tick :: time bin size.
 
-        nimp is number of impact bins across wire region.
+            - nsigma :: minimum truncation of the projected gaussian.
+
+            - nimp :: number of impact bins across wire region.
         '''
-        self.origin = numpy.array(origin[1:])
-        pitch = numpy.array(pitch)
-        self.pmag = numpy.sqrt(pitch[1:].dot(pitch[1:]))
-        self.pnorm = pitch[1:]/self.pmag
+        self.impact = impact
+        self.pitch = pitch
         self.tick = tick
         self.nsigma = nsigma
         self.nimp = nimp
-        # pick = pitch tick :)
-        self.pick = self.pmag / self.nimp 
 
-    def __call__(self, depos):
+    def __call__(self, proj):
         '''
-        Return a list of patches, one for each depo.
+        Perform the raster.
+
+        Each proj results in an patch of size (np, nt).  Dimension 0
+        bound by (pmin, pmax), dimension 1 by (tmin, tmax).
+
+        Patch integral pitch and tick.
         '''
-        device = aots.device(depos.t)
-        amod = aots.mod(device)
-        def todev(a):
-            return aots.new(a, device=device)
+        amod = aots.mod(proj.q)
 
-        dlong = depos.long
-        dtran = depos.tran
+        # Time dimension
+        tn_wid = self.nsigma*proj.dt/self.tick
+        tn_cen = proj.t/self.tick
 
-        twid = dlong*self.nsigma
-        ntmin = amod.floor((depos.t - twid)/self.tick)-1
-        ntmax = amod.ceil ((depos.t + twid)/self.tick)+1
-        tmin = ntmin * self.tick
-        tmax = ntmax * self.tick
-        nt = amod.round(ntmax - ntmin).astype('int')
-        
-        # convert to pitch.
-        yz = depos.block(['y','z']).T # (N,2)
-        p = amod.dot(yz - todev(self.origin), todev(self.pnorm))
-        pwid = dtran*self.nsigma
-        # location of min/max in units of number of pitches
-        npmin = amod.floor((p - pwid)/self.pmag)
-        npmax = amod.ceil ((p + pwid)/self.pmag)
-        # the actual boundary extended to edge of wire pitch region
-        pmin = (npmin - 0.5) * self.pmag
-        pmax = (npmax + 0.5) * self.pmag
-        # number of pick bins, add 1 for the +/- 0.5 above
-        np = ((npmax - npmin + 1) * self.nimp).astype('int')
+        # t-extent in unit of tick counts
+        tn_min = amod.floor(tn_cen - tn_wid)
+        tn_max = amod.ceil(tn_cen + tn_wid)
+        nt = aots.new((tn_max-tn_min), dtype='i4')
+        tmin = tn_min * self.tick
+        tmax = tn_max * self.tick
 
-        q = depos['q']
+        # Pitch dimension 
+        pn_wid = self.nsigma*proj.dp/self.pitch
+        pn_cen = proj.t/self.pitch
+
+        # p-extent in unit of pitch counts
+        pn_min = amod.floor(pn_cen - pn_wid)
+        pn_max = amod.ceil(pn_cen + pn_wid)
+        np = aots.new((pn_max-pn_min), dtype='i4')
+
+        # We move down by 1/2 pitch and up to the impact
+        padjust = self.impact/self.nimp - 0.5
+        pmin = (pn_min + padjust)*self.pitch
+        pmax = (pn_max + padjust)*self.pitch
+
+        device = aots.device(proj.q)
+        q = proj.q
         patches = list()
-        for ind in range(len(depos)):
-            lt = amod.linspace(float(tmin[ind]), float(tmax[ind]),
-                               int(nt[ind]), endpoint=False)
-            lp = amod.linspace(float(pmin[ind]), float(pmax[ind]),
-                               int(np[ind]), endpoint=False)
-            P,T = amod.meshgrid(lp,lt,indexing='ij')
+        for ind in range(len(proj)):
+            lt = aots.linspace(float(tmin[ind]), float(tmax[ind]),
+                               int(nt[ind]), endpoint=False,
+                               device=device)
+            lp = aots.linspace(float(pmin[ind]), float(pmax[ind]),
+                               int(np[ind]), endpoint=False,
+                               device=device)
+            P,T = aots.meshgrid(lp, lt, indexing='ij')
 
-            dT = (T-depos.t[ind])/dlong[ind]
-            dP = (P-p[ind])/dtran[ind]
+            dT = (T-proj.t[ind])/proj.dt[ind]
+            dP = (P-proj.p[ind])/proj.dp[ind]
             patch = q[ind] * amod.exp(-0.5*(dP*dP + dT*dT))
             patches.append(patch)
         return dict(patches=patches,

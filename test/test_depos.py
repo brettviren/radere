@@ -3,6 +3,14 @@
 from radere import depos, aots
 from time import time
 
+def run(device, data_file = "data/muon-depos.npz"):
+    return depos.load_wctnpz(data_file, device=device)
+    
+def test_run():
+    run('numpy')
+
+
+
 def ondev(device):
     ndepos = 10000
     t0 = time()

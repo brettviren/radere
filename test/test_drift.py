@@ -8,6 +8,16 @@ from radere.depos import load_wctnpz
 
 data_file = "data/muon-depos.npz"
 
+def run(device):
+    import test_depos
+    depos = test_depos.run(device)
+    refpln_at = 10*units.cm
+    tr = Transport(refpln_at)
+    return tr(depos)
+    
+def test_run():
+    run('numpy')
+
 def doit(device, rel=1.0):
     
     refpln_at = 10*units.cm

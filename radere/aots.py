@@ -197,3 +197,29 @@ def take_along_axis(arr, indices, axis=None):
 def argsort(a, axis=-1):
     return mod(a).argsort(a, axis)
     
+def dot(a, b):
+    if not is_torch(a):
+        return mod(a).dot(a,b)
+    if len(a.shape) == 1 and len(b.shape) == 1:
+        return torch.dot(a,b)
+    ret = list()
+    for one in a:
+        ret.append(torch.dot(one, b))
+    return torch.tensor(ret, device=device(a))
+
+def linspace(start, stop, num, endpoint=True, device='numpy'):
+    if is_numpy(device) or is_cupy(device):
+        return mod(device).linspace(start, stop, num, endpoint=endpoint)
+    if endpoint:
+        return torch.linspace(start,stop,num,device=device)
+    return torch.linspace(start,stop,num+1,device=device)[:-1]
+
+    
+def meshgrid(a, b, indexing='xy'):
+    if is_torch(a):
+        mg = torch.meshgrid(a,b)
+        if indexing == 'ij':
+            mg = [mg[0].T, mg[1].T]
+        return mg
+    return mod(a).meshgrid(a, b, indexing='xy')
+    
