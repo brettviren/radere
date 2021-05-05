@@ -61,27 +61,50 @@ class Raster:
         pn_min = amod.floor(pn_cen - pn_wid)
         pn_max = amod.ceil(pn_cen + pn_wid)
         np = aots.new((pn_max-pn_min), dtype='i4')
-
         # We move down by 1/2 pitch and up to the impact
         padjust = self.impact/self.nimp - 0.5
         pmin = (pn_min + padjust)*self.pitch
         pmax = (pn_max + padjust)*self.pitch
 
+        # Possible speed ups
+        #
+        # - factor exp(-(x*x + y*y)) to exp(-x*x)exp(-y*y) and use outer product
+        #   30-40%
+        #
+        # - move to pre-defined big array filled with +=
+        #   minor
+        #
+        # - use relative linspaces.
+        #
+        # - discretize sigmas and cache the exp().
+        # - calculate 1/4 of the patch and mirror
+        
         device = aots.device(proj.q)
+        # print(device, int(amod.max(pn_max)-amod.min(pn_min)), " pitches")
+        # print(device, int(amod.max(tn_max)-amod.min(tn_min)), " times")
+
         q = proj.q
         patches = list()
         for ind in range(len(proj)):
+            # about 3/4 goes to the two linspaces
             lt = aots.linspace(float(tmin[ind]), float(tmax[ind]),
                                int(nt[ind]), endpoint=False,
                                device=device)
             lp = aots.linspace(float(pmin[ind]), float(pmax[ind]),
                                int(np[ind]), endpoint=False,
                                device=device)
-            P,T = aots.meshgrid(lp, lt, indexing='ij')
 
-            dT = (T-proj.t[ind])/proj.dt[ind]
-            dP = (P-proj.p[ind])/proj.dp[ind]
-            patch = q[ind] * amod.exp(-0.5*(dP*dP + dT*dT))
+            dT = (lt-proj.t[ind])/proj.dt[ind]
+            gT = -0.5*dT*dT
+            gT = amod.exp(gT)   # the two exp() is ~5%
+
+            dP = (lp-proj.p[ind])/proj.dp[ind]
+            gP = -0.5*dP*dP
+            gP = amod.exp(gP)
+
+            # outer is ~15%
+            patch = q[ind] * amod.outer(gP, gT)
+            
             patches.append(patch)
         return dict(patches=patches,
                     pmin=pmin, pmax=pmax, np=np,
