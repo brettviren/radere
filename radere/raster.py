@@ -5,6 +5,13 @@ Raster depos into patches
 
 import numpy
 from radere import units, aots
+import functools
+
+@functools.cache
+def linspace(amod, tmin, tmax, nt, device):
+    return amod.linspace(tmin, tmax, nt,
+                         endpoint=False, device=device)
+             
 
 class Raster:
     '''
@@ -87,12 +94,16 @@ class Raster:
         patches = list()
         for ind in range(len(proj)):
             # about 3/4 goes to the two linspaces
-            lt = aots.linspace(float(tmin[ind]), float(tmax[ind]),
-                               int(nt[ind]), endpoint=False,
-                               device=device)
-            lp = aots.linspace(float(pmin[ind]), float(pmax[ind]),
-                               int(np[ind]), endpoint=False,
-                               device=device)
+            # lt = aots.linspace(float(tmin[ind]), float(tmax[ind]),
+            #                    int(nt[ind]), endpoint=False,
+            #                    device=device)
+            # lp = aots.linspace(float(pmin[ind]), float(pmax[ind]),
+            #                    int(np[ind]), endpoint=False,
+            #                    device=device)
+            lt = linspace(aots, float(tmin[ind]), float(tmax[ind]),
+                          int(nt[ind]), device) 
+            lp = linspace(aots, float(pmin[ind]), float(pmax[ind]),
+                          int(np[ind]), device)
 
             dT = (lt-proj.t[ind])/proj.dt[ind]
             gT = -0.5*dT*dT

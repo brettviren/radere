@@ -48,3 +48,57 @@ cuda:	load:      1441 us	drift:       787 us	rel: 4.450
 Numpy wins!  Pytorch runner up.  C++ DOG SLOW.
 
 
+
+
+
+** Raster
+
+*** Some initial tries
+
+N^2 calls to Gaussian.
+
+#+begin_example
+numpy:	    8.427 ms,      5.609 ms,      0.409 ms,   2873.969 ms
+cpu:	    6.104 ms,      7.220 ms,    106.728 ms,   2393.987 ms
+cuda:	 1861.621 ms,      5.516 ms,    593.730 ms,   6327.776 ms
+cuda:	    6.399 ms,      5.181 ms,    581.708 ms,   6332.826 ms
+cupy:	  113.849 ms,     17.163 ms,    307.417 ms,  10685.537 ms
+cupy:	    5.731 ms,      5.378 ms,      0.446 ms,  10291.068 ms
+#+end_example
+
+2N calls to Gaussian plus ~outer()~:
+
+#+begin_example
+numpy:	    8.640 ms,      5.434 ms,      0.417 ms,   1975.120 ms
+cpu:	    6.093 ms,      7.263 ms,    106.333 ms,   2072.385 ms
+cuda:	 1778.514 ms,      5.494 ms,    582.276 ms,   6168.514 ms
+cuda:	    6.541 ms,      5.142 ms,    572.541 ms,   6147.239 ms
+cupy:	  105.559 ms,     16.098 ms,    294.211 ms,  10431.923 ms
+cupy:	    4.874 ms,      5.274 ms,      0.364 ms,   9542.149 ms
+#+end_example
+
+Add ~@funtools.cache~ around ~linspace()~.
+
+#+begin_example
+numpy:	    8.250 ms,      4.877 ms,      0.378 ms,   1272.371 ms
+cpu:	    7.367 ms,      7.368 ms,     96.947 ms,   2066.519 ms
+cuda:	 1831.764 ms,      5.492 ms,    604.860 ms,   5908.913 ms
+cuda:	   11.877 ms,      5.531 ms,    657.789 ms,   5369.194 ms
+cupy:	  119.222 ms,     16.833 ms,    314.622 ms,   9265.526 ms
+cupy:	    5.831 ms,      5.248 ms,      0.371 ms,   7869.781 ms
+#+end_example
+
+
+*** Doing better
+
+Two things are incorrect so far:
+
+- sampling the Gaussian instead of integrating bins (~erf()~)
+- missing the post-raster fluctuations.  These may make it impossible to deinterlace until after raster
+
+We may discretize the Gaussian raster at the expense of not allowing
+position variation at the bin size.  If acceptable then up to
+normalization the binned Gaussian is fully specified by a single
+discrete width number.  This allows for caching and avoiding many
+~erf()~ calls.
+
