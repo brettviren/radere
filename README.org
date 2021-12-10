@@ -5,12 +5,18 @@ This is a work in progress.
 
 * What's here
 
-This package provides a prototype reimplementation of [[https://wirecell.bnl.gov/][Wire-Cell Toolkit's]] LAr TPC detector simulation.  The intention is to test out optimizations made possible by simplifying the code to make the algorithms more SIMD/GPU friendly and factoring the parts to better allow disentangling bottlenecks.
+This package reimplements portionsl of [[https://wirecell.bnl.gov/][Wire-Cell Toolkit's]] LAr TPC
+detector simulation with the following goals:
 
-* Guidelines
+- Prototype a simpler factoring of the code prior to implementing in WCT.
+- Evaluate potential for SIMD/GPU optimization.
+- Experiment with "differentiable simulation".
 
-- optionally use CPU or GPU where possible
-- allow CPU/GPU choice w/out changing application code
+* Guidelines and notes
+
+- Provide for a run-time choice of execution on CPU or GPU.
+- Coded to allow for autogradient calculation.
+
 
 ** FFT
 
