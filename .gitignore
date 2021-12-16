@@ -10,3 +10,7 @@ cut
 *.npz
 *.png
 *.pdf
+.ipynb_checkpoints
+#*#
+.#*
+\#*

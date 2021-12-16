@@ -56,17 +56,42 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
 
-
 class Drifter(nn.Module):
     '''
     Drift depos, producing 1-to-1 with output gaining Gaussian extent.
     '''
 
-    def __init__(self, DT, lifetime):
+    range_dt = torch.tensor([0.0,1.0])
+    range_lt = torch.tensor([0.0,10000.0])
+
+    # logit:        [0,1] -> [-inf,inf]
+    # sigmoid: [-inf,inf] -> [0, 1]
+
+    def p2dt(self, p):
+        return self.range_dt[0] + (self.range_dt[1]-self.range_dt[0])*p
+    def p2lt(self, p):
+        return self.range_lt[0] + (self.range_lt[1]-self.range_lt[0])*p
+
+    def dt2p(self, dt):
+        return (dt - self.range_dt[0]) / (self.range_dt[1] - self.range_dt[0])
+    def lt2p(self, lt):
+        return (lt - self.range_lt[0]) / (self.range_lt[1] - self.range_lt[0])
+
+    @property
+    def DT(self):
+        return self.p2dt(torch.sigmoid(self.param_dt))
+    @property
+    def lifetime(self):
+        return self.p2lt(torch.sigmoid(self.param_lt))
+        
+    def __init__(self, DT=0.01, lifetime=3000.0):
+        '''
+        Create a drifter with a nominal parameter values.
+        '''
         super(Drifter, self).__init__()
-        self.lifetime = torch.nn.Parameter(lifetime)
-        self.DT = torch.nn.Parameter(DT)
-        print('Drifter lifetime:', self.lifetime, self.lifetime.item())
+        # working parameters are [-inf,inf]
+        self.param_dt = torch.nn.Parameter(torch.logit(self.dt2p(torch.tensor(DT).clone().detach())))
+        self.param_lt = torch.nn.Parameter(torch.logit(self.lt2p(torch.tensor(lifetime).clone().detach())))
         
     def forward(self, batches_of_depos):
         #print('Drifter:',batches_of_depos.shape)
@@ -86,8 +111,7 @@ class Drifter(nn.Module):
 
         # Fraction of depo absorbs as a function of drift distance
         relx = xdrift/self.lifetime
-        absorbprob = 1-torch.exp(-relx)
-        drifted[:, 2] = flat[:, 2] * absorbprob
+        drifted[:, 2] = flat[:, 2] * torch.exp(-relx)
 
         # Gain Gaussian extent
         width = flat[:, 3]
@@ -150,14 +174,13 @@ class Collector(nn.Module):
         return got
 
 
-def random_depos(nbatches, nperevent, bb=[(0,1000),(-50,50)],
-                 device='cpu'):
+def random_depos(nbatches, nperevent, bb=[(0,1000),(-50,50)]):
     '''
     Return tensor of shape (nbatches, nperevent, 4) holding depos
     uniformly randomly distributed in given bounding box bb.
     '''
     with torch.no_grad():
-        depos = torch.zeros(nbatches, nperevent, 4, device=device)
+        depos = torch.zeros(nbatches, nperevent, 4)
         for axis in [0,1]:
             depos[:,:,axis].uniform_(bb[axis][0], bb[axis][1])
         depos[:,:,2] = 1.0   # for now, no q distribution
@@ -193,6 +216,7 @@ def seed_worker(worker_id):
 
 def loop_train(dataloader, model, loss_fn, optimizer):
     size = len(dataloader.dataset)
+    drifter = list(model.children())[0]
     for batch, (X, y) in enumerate(dataloader):
         pred = model(X)
         loss = loss_fn(pred, y)
@@ -205,9 +229,9 @@ def loop_train(dataloader, model, loss_fn, optimizer):
         if batch % 10 == 0:
             loss, current = loss.item(), batch * len(X)
             np = {np[0]:np[1] for np in model.named_parameters()}
-            DT = np["0.DT"]
-            lt = np["0.lifetime"]
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}] DT:{DT.item():>7f}:{DT.grad:>7f} lt:{lt.item():>7f}:{lt.grad:>7f}")
+            DT = drifter.DT.item()
+            lt = drifter.lifetime.item()
+            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}] DT:{DT} lt:{lt}")
 
 def loop_test(dataloader, model, loss_fn):
     size = len(dataloader.dataset)
@@ -225,20 +249,18 @@ def loop_test(dataloader, model, loss_fn):
     print(f"Test Error: \n Accuracy: Avg loss: {test_loss:>8f} \n")    
 
 
-def make_model(DT=0.01, lifetime=3000.0, pitch=5.0, nwires=21,
-               device='cpu'):
-    def tt(val): 
-        return torch.tensor(val, device=device)
+def make_model(DT=0.01, lifetime=3000.0, pitch=5.0, nwires=21):
+    drifter = Drifter(DT=DT, lifetime=lifetime)
     span = nwires * pitch
     half = 0.5*span
-    bins = torch.linspace(-half, half, nwires+1, device=device)
-    drifter = Drifter(DT=tt(DT), lifetime=tt(lifetime))
+    bins = torch.linspace(-half, half, nwires+1)
     collector = Collector(binning=bins)
     return nn.Sequential(drifter, collector)
                 
 
 
-def test_train(batch_size=64, learning_rate=0.0001,  num_workers=0,
+def test_train(epochs = 1,
+               batch_size=64, learning_rate=0.0001,  num_workers=0,
                nevent=100000, nper=10
                ):
     rng = torch.Generator()
@@ -251,6 +273,8 @@ def test_train(batch_size=64, learning_rate=0.0001,  num_workers=0,
     with torch.no_grad():
         reality = make_model(0.01, 3000.0, nwires=nwires)
     model = make_model(start_DT, start_lt, nwires=nwires)
+
+    # get drifter so we can print its parameters
     drifter = list(model.children())[0]
 
     depos = random_depos(nevent, nper)
@@ -264,24 +288,16 @@ def test_train(batch_size=64, learning_rate=0.0001,  num_workers=0,
                      )
 
 
-    # loss_fn = nn.MSELoss()
-    loss_fn = nn.CrossEntropyLoss()
+    loss_fn = nn.MSELoss()
     for par in model.named_parameters():
         print("parameter:", par)
 
-        
-
-    lr_dt = learning_rate * start_DT
-    lr_lt = learning_rate * start_lt
-    # optimizer = torch.optim.SGD([dict(params=[drifter.DT], lr=lr_dt, momentum=0.9),
-    #                              dict(params=[drifter.lifetime], lr=lr_lt, momentum=0.99)])
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
-    epochs = 1
     for epoch in range(epochs):
         print(f"Epoch {epoch+1}\n-------------------------------")
         loop_train(dgl, model, loss_fn, optimizer)
-        loop_test(dgl, model, loss_fn)
+        #loop_test(dgl, model, loss_fn)
     for par in model.named_parameters():
         print("parameter:", par, par[1].grad)
     print("Done!")        
@@ -326,5 +342,11 @@ def test_gen():
 
 if '__main__' == __name__:
     #test_gen()
-    test_train()
-    
+    nper = 10
+    batch_size = 100
+    nevent = batch_size * 1000
+    test_train(epochs=1, batch_size=batch_size, learning_rate=0.1,
+               num_workers=4,
+               nevent=nevent, nper=nper
+               )
+
