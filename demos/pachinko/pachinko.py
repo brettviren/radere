@@ -46,6 +46,10 @@ Notes:
 
     - Must assure no_grad for dataset or else with num_workers arg to
       dataload one gets crypitic error.  See: https://redd.it/h7r6dt
+
+    - On i7-9750H CPU: 23s, on GTX 1650 GPU: 55s.....  That's with
+      loading dataset into CPU memory and trickling it into the GPU.
+      When loading directly to GPU memory then running on GPU is 22s.
 '''
 
 import numpy
@@ -89,19 +93,21 @@ class Drifter(nn.Module):
         Create a drifter with a nominal parameter values.
         '''
         super(Drifter, self).__init__()
+        initial_dt = torch.logit(self.dt2p(torch.tensor(DT))).item()
+        initial_lt = torch.logit(self.lt2p(torch.tensor(lifetime))).item()
         # working parameters are [-inf,inf]
-        self.param_dt = torch.nn.Parameter(torch.logit(self.dt2p(torch.tensor(DT).clone().detach())))
-        self.param_lt = torch.nn.Parameter(torch.logit(self.lt2p(torch.tensor(lifetime).clone().detach())))
+        self.param_dt = torch.nn.Parameter(torch.tensor(initial_dt))
+        self.param_lt = torch.nn.Parameter(torch.tensor(initial_lt))
         
     def forward(self, batches_of_depos):
         #print('Drifter:',batches_of_depos.shape)
 
         # (nperbatch, ndepos, 4)
         # each depo is handled independently, w/out regards to batching
-        flat = batches_of_depos.reshape(-1, 4)
+        flat = batches_of_depos.reshape(-1, 4).to(device=self.param_dt.device)
 
         # output
-        drifted = torch.zeros_like(flat)
+        drifted = torch.zeros_like(flat, device=self.param_dt.device)
 
         # X coordiates, output are all at 0.0
         xdrift = flat[:,0]
@@ -151,7 +157,7 @@ class Collector(nn.Module):
         ndepos = drifted_depos.shape[0]
 
         # every one of ndepos contributes to its batch histogram
-        ret = torch.zeros(len(self.binning)-1)
+        ret = torch.zeros(len(self.binning)-1, device=drifted_depos.device)
 
         ym = drifted_depos[:,1]
         q = drifted_depos[:,2]
@@ -174,13 +180,15 @@ class Collector(nn.Module):
         return got
 
 
-def random_depos(nbatches, nperevent, bb=[(0,1000),(-50,50)]):
+def random_depos(nbatches, nperevent, bb=[(0,1000),(-50,50)], device='cpu'):
     '''
     Return tensor of shape (nbatches, nperevent, 4) holding depos
     uniformly randomly distributed in given bounding box bb.
+
+    The depos are NOT made on the device.
     '''
     with torch.no_grad():
-        depos = torch.zeros(nbatches, nperevent, 4)
+        depos = torch.zeros(nbatches, nperevent, 4, device=device)
         for axis in [0,1]:
             depos[:,:,axis].uniform_(bb[axis][0], bb[axis][1])
         depos[:,:,2] = 1.0   # for now, no q distribution
@@ -205,8 +213,15 @@ class Deposet(Dataset):
         return self.depos.shape[0]
 
     def __getitem__(self, idx):
-        return self.depos[idx], self.labels[idx]
-
+        if idx >= len(self):
+            print("Deposet overrun!")
+            raise StopIteration
+        try:
+            ret = self.depos[idx], self.labels[idx]
+        except RuntimeError:
+            print(f'idx={idx}')
+            raise
+        return ret
 
 
 def seed_worker(worker_id):
@@ -249,11 +264,11 @@ def loop_test(dataloader, model, loss_fn):
     print(f"Test Error: \n Accuracy: Avg loss: {test_loss:>8f} \n")    
 
 
-def make_model(DT=0.01, lifetime=3000.0, pitch=5.0, nwires=21):
+def make_model(DT=0.01, lifetime=3000.0, pitch=5.0, nwires=21, device='cpu'):
     drifter = Drifter(DT=DT, lifetime=lifetime)
     span = nwires * pitch
     half = 0.5*span
-    bins = torch.linspace(-half, half, nwires+1)
+    bins = torch.linspace(-half, half, nwires+1, device=device)
     collector = Collector(binning=bins)
     return nn.Sequential(drifter, collector)
                 
@@ -261,7 +276,8 @@ def make_model(DT=0.01, lifetime=3000.0, pitch=5.0, nwires=21):
 
 def test_train(epochs = 1,
                batch_size=64, learning_rate=0.0001,  num_workers=0,
-               nevent=100000, nper=10
+               nevent=100000, nper=10,
+               device='cpu'
                ):
     rng = torch.Generator()
     rng.manual_seed(0)
@@ -271,13 +287,16 @@ def test_train(epochs = 1,
 
     nwires = 21
     with torch.no_grad():
-        reality = make_model(0.01, 3000.0, nwires=nwires)
-    model = make_model(start_DT, start_lt, nwires=nwires)
+        reality = make_model(0.01, 3000.0, nwires=nwires, device=device)
+        reality.to(device=device)
+    model = make_model(start_DT, start_lt, nwires=nwires, device=device)
+    model.to(device=device)
+    
 
     # get drifter so we can print its parameters
     drifter = list(model.children())[0]
 
-    depos = random_depos(nevent, nper)
+    depos = random_depos(nevent, nper, device=device)
     dg = Deposet(depos, reality)
 
     dgl = DataLoader(dg,
@@ -346,7 +365,8 @@ if '__main__' == __name__:
     batch_size = 100
     nevent = batch_size * 1000
     test_train(epochs=1, batch_size=batch_size, learning_rate=0.1,
-               num_workers=4,
-               nevent=nevent, nper=nper
+               num_workers=0,
+               nevent=nevent, nper=nper,
+               device='cpu'
                )
 
