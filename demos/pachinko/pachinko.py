@@ -47,6 +47,7 @@ Notes:
     - Must assure no_grad for dataset or else with num_workers arg to
       dataload one gets crypitic error.  See: https://redd.it/h7r6dt
 
+    - On i7-4770K CPU: 28s (load time  6.0s, 1epoch 21.7s)
     - On i7-9750H CPU: 23s (load time  4.8s, 1epoch 17.5s),
     - On GTX 1650 GPU: 55s (load time 11.9s, 1epoch 42.9s).
 '''
