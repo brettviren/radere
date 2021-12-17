@@ -59,14 +59,15 @@ import random
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
+dtype = torch.float
 
 class Drifter(nn.Module):
     '''
     Drift depos, producing 1-to-1 with output gaining Gaussian extent.
     '''
 
-    range_dt = torch.tensor([0.0,1.0])
-    range_lt = torch.tensor([0.0,10000.0])
+    range_dt = torch.tensor([0.0,1.0], dtype=dtype)
+    range_lt = torch.tensor([0.0,10000.0], dtype=dtype)
 
     # logit:        [0,1] -> [-inf,inf]
     # sigmoid: [-inf,inf] -> [0, 1]
@@ -93,11 +94,11 @@ class Drifter(nn.Module):
         Create a drifter with a nominal parameter values.
         '''
         super(Drifter, self).__init__()
-        initial_dt = torch.logit(self.dt2p(torch.tensor(DT))).item()
-        initial_lt = torch.logit(self.lt2p(torch.tensor(lifetime))).item()
+        initial_dt = torch.logit(self.dt2p(torch.tensor(DT, dtype=dtype))).item()
+        initial_lt = torch.logit(self.lt2p(torch.tensor(lifetime, dtype=dtype))).item()
         # working parameters are [-inf,inf]
-        self.param_dt = torch.nn.Parameter(torch.tensor(initial_dt))
-        self.param_lt = torch.nn.Parameter(torch.tensor(initial_lt))
+        self.param_dt = torch.nn.Parameter(torch.tensor(initial_dt, dtype=dtype))
+        self.param_lt = torch.nn.Parameter(torch.tensor(initial_lt, dtype=dtype))
         
     def forward(self, batches_of_depos):
         #print('Drifter:',batches_of_depos.shape)
@@ -157,7 +158,7 @@ class Collector(nn.Module):
         ndepos = drifted_depos.shape[0]
 
         # every one of ndepos contributes to its batch histogram
-        ret = torch.zeros(len(self.binning)-1, device=drifted_depos.device)
+        ret = torch.zeros(len(self.binning)-1, dtype=dtype, device=drifted_depos.device)
 
         ym = drifted_depos[:,1]
         q = drifted_depos[:,2]
@@ -188,7 +189,7 @@ def random_depos(nbatches, nperevent, bb=[(0,1000),(-50,50)], device='cpu'):
     The depos are NOT made on the device.
     '''
     with torch.no_grad():
-        depos = torch.zeros(nbatches, nperevent, 4, device=device)
+        depos = torch.zeros(nbatches, nperevent, 4, dtype=dtype, device=device)
         for axis in [0,1]:
             depos[:,:,axis].uniform_(bb[axis][0], bb[axis][1])
         depos[:,:,2] = 1.0   # for now, no q distribution
@@ -241,6 +242,8 @@ def loop_train(dataloader, model, loss_fn, optimizer):
         loss.backward()
         optimizer.step()
 
+        # This calls .item() which causes a transfer from GPU.
+        # However, removing it does not help with the long run time.
         if batch % 10 == 0:
             loss, current = loss.item(), batch * len(X)
             np = {np[0]:np[1] for np in model.named_parameters()}
@@ -352,6 +355,7 @@ def test_gen():
                      num_workers=1, # see Notes at top
                      worker_init_fn=seed_worker,
                      generator=rng,
+                     pin_memory=True,
                      )
 
     two = next(iter(dgl))
@@ -369,12 +373,13 @@ def test_gen():
 if '__main__' == __name__:
     #test_gen()
     nper = 10
-    batch_size = 100
-    nevent = batch_size * 1000
+    nevent = 100000
+    batch_size = nevent//1000
+    print(f'batch size: {batch_size}')
     test_train(epochs=1, batch_size=batch_size, learning_rate=0.1,
                num_workers=0,
                nevent=nevent, nper=nper,
-               #device='cuda'
-               device='cpu'
+               device='cuda'
+               #device='cpu'
                )
 
