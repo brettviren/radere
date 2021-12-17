@@ -47,11 +47,11 @@ Notes:
     - Must assure no_grad for dataset or else with num_workers arg to
       dataload one gets crypitic error.  See: https://redd.it/h7r6dt
 
-    - On i7-9750H CPU: 23s, on GTX 1650 GPU: 55s.....  That's with
-      loading dataset into CPU memory and trickling it into the GPU.
-      When loading directly to GPU memory then running on GPU is 22s.
+    - On i7-9750H CPU: 23s (load time  4.8s, 1epoch 17.5s),
+    - On GTX 1650 GPU: 55s (load time 11.9s, 1epoch 42.9s).
 '''
 
+import time
 import numpy
 import torch
 import random
@@ -279,6 +279,7 @@ def test_train(epochs = 1,
                nevent=100000, nper=10,
                device='cpu'
                ):
+    t0 = time.time()
     rng = torch.Generator()
     rng.manual_seed(0)
 
@@ -291,7 +292,6 @@ def test_train(epochs = 1,
         reality.to(device=device)
     model = make_model(start_DT, start_lt, nwires=nwires, device=device)
     model.to(device=device)
-    
 
     # get drifter so we can print its parameters
     drifter = list(model.children())[0]
@@ -312,11 +312,18 @@ def test_train(epochs = 1,
         print("parameter:", par)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    t1 = time.time()
+    print(f'load time: {t1-t0}')
 
+    tloop1 = time.time()
     for epoch in range(epochs):
         print(f"Epoch {epoch+1}\n-------------------------------")
         loop_train(dgl, model, loss_fn, optimizer)
         #loop_test(dgl, model, loss_fn)
+        tloop2 = time.time()
+        print(f'time: {tloop2-tloop1}')
+        tloop1 = tloop2
+
     for par in model.named_parameters():
         print("parameter:", par, par[1].grad)
     print("Done!")        
@@ -367,6 +374,7 @@ if '__main__' == __name__:
     test_train(epochs=1, batch_size=batch_size, learning_rate=0.1,
                num_workers=0,
                nevent=nevent, nper=nper,
+               #device='cuda'
                device='cpu'
                )
 
