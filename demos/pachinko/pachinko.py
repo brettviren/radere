@@ -158,9 +158,6 @@ class Collector(nn.Module):
 
         ndepos = drifted_depos.shape[0]
 
-        # every one of ndepos contributes to its batch histogram
-        ret = torch.zeros(len(self.binning)-1, dtype=dtype, device=drifted_depos.device)
-
         ym = drifted_depos[:,1]
         q = drifted_depos[:,2]
         sigma = drifted_depos[:,3]
